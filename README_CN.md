@@ -1,4 +1,7 @@
 # DFRobot_MultiGasSensor
+
+[![CI](https://github.com/romkey/DFRobot_MultiGasSensor/actions/workflows/ci.yml/badge.svg)](https://github.com/romkey/DFRobot_MultiGasSensor/actions/workflows/ci.yml)
+
 - [English Version](./README.md)
 
 气体传感器广泛应用在气体研究，环境检测，生产安全监测，溶解气体分析，污染源/排放口规律研究，有毒有害，可燃气体检测报警，化验室或现场简单气体分析测试等方面，这款气体传感器更是集成了多种气体探头的一个多气体传感器，可以适用于各种各样的应用场景
@@ -92,19 +95,10 @@ NO2 O3 CL2 NH3 H2 HCL SO2 HF PH3等气体。只需要硬件切换对应
    * @brief 设置是否开启温度补偿，传感器在不同温度下的输出值会有差别，所以为
    * @n     了获取到的气体浓度更精确，在计算气体浓度的时候需要增加温度补偿
    * @param tempswitch 是否打开温度补偿
-   * @n             ON 打开温度补偿
-   * @n            OFF 关闭温度补偿
+   * @n             SWITCH_ON 打开温度补偿
+   * @n            SWITCH_OFF 关闭温度补偿
    */
   void setTempCompensation(eSwitch_t tempswitch);
-
-  /**
-   * @fn readVolatageData
-   * @brief 获取传感器气体浓度以原始电压输出，不同于直接读取传感器寄存器，这
-   * @n     个函数主要用来检验读取的气体浓度是否准确
-   * @param vopin 用来接收传感器探头原始电压输出的引脚
-   * @return float类型，表示返回传感器气体浓度的原始电压输出
-   */
-  float readVolatageData(uint8_t vopin);
 
   /**
    * @fn pack

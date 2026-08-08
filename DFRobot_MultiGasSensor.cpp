@@ -9,556 +9,505 @@
   * @url         https://github.com/DFRobot/DFRobot_MultiGasSensor
 */
 #include "DFRobot_MultiGasSensor.h"
+#include <string.h>
 
-sAllData_t AllData;
-sAllDataAnalysis_t AllDataAnalysis;
-float _temp;
-bool ini_tempswitch = 0;
-static uint8_t FucCheckSum(uint8_t* i,uint8_t ln)
+static uint8_t FucCheckSum(uint8_t *data, uint8_t ln)
 {
-  uint8_t j,tempq=0;
-  i+=1;
-  for(j=0;j<(ln-2);j++)
+  uint8_t sum = 0;
+  data += 1;
+  for (uint8_t j = 0; j < (ln - 2); j++)
   {
-    tempq+=*i;i++;
+    sum += *data;
+    data++;
   }
-  tempq=(~tempq)+1;
-  return(tempq);
+  return (~sum) + 1;
 }
 
-static void analysisAllData(void)
+DFRobot_GAS::DFRobot_GAS(void)
+  : _tempswitch(SWITCH_OFF), _temp(0.0f), _responseDelayMs(100)
 {
-  float Con;
-  if (AllData.check == FucCheckSum((uint8_t *)&AllData, 8))
+  memset(&_allData, 0, sizeof(_allData));
+  memset(&_allDataAnalysis, 0, sizeof(_allDataAnalysis));
+}
+
+void DFRobot_GAS::setResponseDelayMs(uint16_t delayMs)
+{
+  _responseDelayMs = delayMs;
+}
+
+bool DFRobot_GAS::readResponse(uint8_t *recvbuf, uint8_t len)
+{
+  if (_responseDelayMs > 0)
+    delay(_responseDelayMs);
+  return readData(0, recvbuf, len) == len;
+}
+
+bool DFRobot_GAS::responseChecksumValid(const uint8_t *recvbuf, uint8_t len) const
+{
+  if (len < DFGAS_PROTOCOL_LEN)
+    return false;
+  return FucCheckSum((uint8_t *)recvbuf, 8) == recvbuf[8];
+}
+
+bool DFRobot_GAS::readInitiativePacket(uint8_t *recvbuf, uint8_t len)
+{
+  if (readData(0, recvbuf, len) != len)
+    return false;
+  return responseChecksumValid(recvbuf, len);
+}
+
+bool DFRobot_GAS::storeAndAnalyzeInitiativePacket(const uint8_t *recvbuf, uint8_t len)
+{
+  if (!responseChecksumValid(recvbuf, len))
+    return false;
+  memcpy(&_allData, recvbuf, len);
+  analysisAllData();
+  return true;
+}
+
+float DFRobot_GAS::getGasConcentration(void) const
+{
+  return _allDataAnalysis.gasconcentration;
+}
+
+const char *DFRobot_GAS::getGasType(void) const
+{
+  return _allDataAnalysis.gastype;
+}
+
+float DFRobot_GAS::getSensorTemperature(void) const
+{
+  return _allDataAnalysis.temp;
+}
+
+const char *DFRobot_GAS::gasTypeFromCode(uint8_t code)
+{
+  switch (code)
   {
-    switch(AllData.gasconcentration_decimals){
-      case 0:
-        AllDataAnalysis.gasconcentration = (AllData.gasconcentration_h << 8) + AllData.gasconcentration_l;
-        break;
-      case 1:
-        AllDataAnalysis.gasconcentration = 0.1 * ((AllData.gasconcentration_h << 8) + AllData.gasconcentration_l);
-        break;
-      case 2:
-        AllDataAnalysis.gasconcentration = 0.01 * ((AllData.gasconcentration_h << 8) + AllData.gasconcentration_l);
-        break;
-      default:
-        break;
-    }
-    Con = AllDataAnalysis.gasconcentration;
-    if (ini_tempswitch == DFRobot_GAS::ON)
-    {
-      switch (AllData.gastype)
-      {
-        case DFRobot_GAS::O2:
-          break;
-        case DFRobot_GAS::CO:
-          if (((_temp) > -20) && ((_temp) < 20))
-            Con = (Con / (0.005 * (_temp) + 0.9));
-          else if (((_temp) > 20) && ((_temp) < 40))
-            Con = (Con / (0.005 * (_temp) + 0.9) - (0.3 * (_temp)-6));
-          else
-            Con = 0.0;
-          break;
-        case DFRobot_GAS::H2S:
-          if (((_temp) > -20) && ((_temp) < 20))
-            Con = (Con / (0.006 * (_temp) + 0.92));
-          else if (((_temp) > 20) && ((_temp) < 40))
-            Con = (Con / (0.006 * (_temp) + 0.92) - (0.015 * (_temp) + 2.4));
-          else
-            Con = 0.0;
-          break;
-        case DFRobot_GAS::NO2:
-          if (((_temp) > -20) && ((_temp) < 0))
-            Con = ((Con / (0.005 * (_temp) + 0.9) - (-0.0025 * (_temp))));
-          else if (((_temp) > 0) && ((_temp) < 20))
-            Con = ((Con / (0.005 * (_temp) + 0.9) - (0.005 * (_temp) + 0.005)));
-          else if (((_temp) > 20) && ((_temp) < 40))
-            Con = ((Con / (0.005 * (_temp) + 0.9) - (0.0025 * (_temp) + 0.1)));
-          else
-            Con = 0.0;
-          break;
-        case DFRobot_GAS::O3:
-          if (((_temp) > -20) && ((_temp) < 0))
-            Con = ((Con / (0.015 * (_temp) + 1.1) - 0.05));
-          else if (((_temp) > 0) && ((_temp) < 20))
-            Con = ((Con / 1.1 - (0.01 * (_temp))));
-          else if (((_temp) > 20) && ((_temp) < 40))
-            Con = ((Con / 1.1 - (-0.05 * (_temp) + 0.3)));
-          else
-            Con = 0.0;
-          break;
-        case DFRobot_GAS::CL2:
-          if (((_temp) > -20) && ((_temp) < 0))
-            Con = ((Con / (0.015 * (_temp) + 1.1) - (-0.0025 * (_temp))));
-          else if (((_temp) > 0) && ((_temp) < 20))
-            Con = ((Con / 1.1 - 0.005 * (_temp)));
-          else if (((_temp) > 20) && ((_temp) < 40))
-            Con = ((Con / 1.1 - (0.06 * (_temp)-0.12)));
-          else
-            Con = 0.0;
-          break;
-        case DFRobot_GAS::NH3:
-          if (((_temp) > -20) && ((_temp) < 0))
-            Con = (Con / (0.08 * (_temp) + 3.98) - (-0.005 * (_temp) + 0.3));
-          else if (((_temp) > 0) && ((_temp) < 20))
-            Con = (Con / (0.08 * (_temp) + 3.98) - (-0.005 * (_temp) + 0.3));
-          else if (((_temp) > 20) && ((_temp) < 40))
-            Con = (Con / (0.004 * (_temp) + 1.08) - (-0.1 * (_temp) + 2));
-          else
-            Con = 0.0;
-          break;
-        case DFRobot_GAS::H2:
-          if (((_temp) > -20) && ((_temp) < 40))
-            Con = (Con / (0.74 * (_temp) + 0.007) - 5);
-          else
-            Con = 0.0;
-          break;
-        case DFRobot_GAS::HF:
-          if (((_temp) > -20) && ((_temp) < 0))
-            Con = (((Con / 1) - (-0.0025 * (_temp))));
-          else if (((_temp) > 0) && ((_temp) < 20))
-            Con = ((Con / 1 + 0.1));
-          else if (((_temp) > 20) && ((_temp) < 40))
-            Con = ((Con / 1 - (0.0375 * (_temp)-0.85)));
-          else
-            Con = 0.0;
-          break;
-        case DFRobot_GAS::_PH3:
-          if (((_temp) > -20) && ((_temp) < 40))
-            Con = ((Con / (0.005 * (_temp) + 0.9)));
-          break;
-        case DFRobot_GAS::HCL:
-          break;
-        case DFRobot_GAS::SO2:
-          break;
-        default:
-          break;
-      }
-    }
-    if (Con>=0)
-      AllDataAnalysis.gasconcentration = Con;
-    else
-      AllDataAnalysis.gasconcentration = 0;
-    switch (AllData.gastype){
-      case 0x05:
-        AllDataAnalysis.gastype = "O2";
-        break;
-      case 0x04:
-        AllDataAnalysis.gastype = "CO";
-        break;
-      case 0x03:
-        AllDataAnalysis.gastype = "H2S";
-        break;
-      case 0x2C:
-        AllDataAnalysis.gastype = "NO2";
-        break;
-      case 0x2A:
-        AllDataAnalysis.gastype = "O3";
-        break;
-      case 0x31:
-        AllDataAnalysis.gastype = "CL2";
-        break;
-      case 0x02:
-        AllDataAnalysis.gastype = "NH3";
-        break;
-      case 0x06:
-        AllDataAnalysis.gastype = "H2";
-        break;
-      case 0x2E:
-        AllDataAnalysis.gastype = "HCL";
-        break;
-      case 0x2B:
-        AllDataAnalysis.gastype = "SO2";
-        break;
-      case 0x33:
-        AllDataAnalysis.gastype = "HF";
-        break;
-      case 0x45:
-        AllDataAnalysis.gastype = "PH3";
-        break;
-      default:
-        AllDataAnalysis.gastype = "";
-        break;
-    }
-    uint16_t temp_ADC = (AllData.temp_h << 8) + AllData.temp_l;
-    float Vpd3 = 3 * (float)temp_ADC / 1024;
-    float Rth = Vpd3 * 10000 / (3 - Vpd3);
-    AllDataAnalysis.temp = 1 / (1 / (273.15 + 25) + 1 / 3380.13 * log(Rth / 10000)) - 273.15;
+    case DFRobot_GAS::O2:   return "O2";
+    case DFRobot_GAS::CO:   return "CO";
+    case DFRobot_GAS::H2S:  return "H2S";
+    case DFRobot_GAS::NO2:  return "NO2";
+    case DFRobot_GAS::O3:   return "O3";
+    case DFRobot_GAS::CL2:  return "CL2";
+    case DFRobot_GAS::NH3:  return "NH3";
+    case DFRobot_GAS::H2:   return "H2";
+    case DFRobot_GAS::HCL:  return "HCL";
+    case DFRobot_GAS::SO2:  return "SO2";
+    case DFRobot_GAS::HF:   return "HF";
+    case DFRobot_GAS::_PH3: return "PH3";
+    default:                return "";
   }
+}
+
+bool DFRobot_GAS::gasTypeUsesTenths(eType_t gasType)
+{
+  switch (gasType)
+  {
+    case O2:
+    case NO2:
+    case O3:
+    case CL2:
+    case HCL:
+    case SO2:
+    case HF:
+    case _PH3:
+      return true;
+    default:
+      return false;
+  }
+}
+
+void DFRobot_GAS::scaleThresholdForGasType(uint16_t &threshold, eType_t gasType)
+{
+  if (gasTypeUsesTenths(gasType))
+    threshold *= 10;
+}
+
+float DFRobot_GAS::adcToTempC(uint16_t tempAdc) const
+{
+  if (tempAdc >= 1023)
+    return 0.0f;
+
+  float vpd3 = 3.0f * (float)tempAdc / 1024.0f;
+  float denom = 3.0f - vpd3;
+  if (denom <= 0.001f)
+    return 0.0f;
+
+  float rth = vpd3 * 10000.0f / denom;
+  return 1.0f / (1.0f / (273.15f + 25.0f) + 1.0f / 3380.13f * log(rth / 10000.0f)) - 273.15f;
+}
+
+float DFRobot_GAS::applyTempCompensation(float concentration, uint8_t gasType, float temp) const
+{
+  float con = concentration;
+
+  switch (gasType)
+  {
+    case O2:
+    case HCL:
+    case SO2:
+      break;
+    case CO:
+      if (temp >= -20.0f && temp <= 20.0f)
+        con = con / (0.005f * temp + 0.9f);
+      else if (temp > 20.0f && temp <= 40.0f)
+        con = con / (0.005f * temp + 0.9f) - (0.3f * temp - 6.0f);
+      else
+        con = 0.0f;
+      break;
+    case H2S:
+      if (temp >= -20.0f && temp <= 20.0f)
+        con = con / (0.006f * temp + 0.92f);
+      else if (temp > 20.0f && temp <= 40.0f)
+        con = con / (0.006f * temp + 0.92f) - (0.015f * temp + 2.4f);
+      else
+        con = 0.0f;
+      break;
+    case NO2:
+      if (temp >= -20.0f && temp < 0.0f)
+        con = con / (0.005f * temp + 0.9f) - (-0.0025f * temp);
+      else if (temp >= 0.0f && temp <= 20.0f)
+        con = con / (0.005f * temp + 0.9f) - (0.005f * temp + 0.005f);
+      else if (temp > 20.0f && temp <= 40.0f)
+        con = con / (0.005f * temp + 0.9f) - (0.0025f * temp + 0.1f);
+      else
+        con = 0.0f;
+      break;
+    case O3:
+      if (temp >= -20.0f && temp < 0.0f)
+        con = con / (0.015f * temp + 1.1f) - 0.05f;
+      else if (temp >= 0.0f && temp <= 20.0f)
+        con = con / 1.1f - (0.01f * temp);
+      else if (temp > 20.0f && temp <= 40.0f)
+        con = con / 1.1f - (-0.05f * temp + 0.3f);
+      else
+        con = 0.0f;
+      break;
+    case CL2:
+      if (temp >= -20.0f && temp < 0.0f)
+        con = con / (0.015f * temp + 1.1f) - (-0.0025f * temp);
+      else if (temp >= 0.0f && temp <= 20.0f)
+        con = con / 1.1f - 0.005f * temp;
+      else if (temp > 20.0f && temp <= 40.0f)
+        con = con / 1.1f - (0.06f * temp - 0.12f);
+      else
+        con = 0.0f;
+      break;
+    case NH3:
+      if (temp >= -20.0f && temp <= 0.0f)
+        con = con / (0.08f * temp + 3.98f) - (-0.005f * temp + 0.3f);
+      else if (temp > 0.0f && temp <= 20.0f)
+        con = con / (0.08f * temp + 3.98f) - (-0.005f * temp + 0.3f);
+      else if (temp > 20.0f && temp <= 40.0f)
+        con = con / (0.004f * temp + 1.08f) - (-0.1f * temp + 2.0f);
+      else
+        con = 0.0f;
+      break;
+    case H2:
+      if (temp >= -20.0f && temp <= 40.0f)
+        con = con / (0.74f * temp + 0.007f) - 5.0f;
+      else
+        con = 0.0f;
+      break;
+    case HF:
+      if (temp >= -20.0f && temp < 0.0f)
+        con = con - (-0.0025f * temp);
+      else if (temp >= 0.0f && temp <= 20.0f)
+        con = con + 0.1f;
+      else if (temp > 20.0f && temp <= 40.0f)
+        con = con - (0.0375f * temp - 0.85f);
+      else
+        con = 0.0f;
+      break;
+    case _PH3:
+      if (temp >= -20.0f && temp <= 40.0f)
+        con = con / (0.005f * temp + 0.9f);
+      else
+        con = 0.0f;
+      break;
+    default:
+      break;
+  }
+
+  return (con >= 0.0f) ? con : 0.0f;
+}
+
+void DFRobot_GAS::analysisAllData(void)
+{
+  if (!responseChecksumValid((uint8_t *)&_allData, DFGAS_PROTOCOL_LEN))
+    return;
+
+  uint16_t rawCon = (_allData.gasconcentration_h << 8) + _allData.gasconcentration_l;
+  switch (_allData.gasconcentration_decimals)
+  {
+    case 1:
+      _allDataAnalysis.gasconcentration = 0.1f * rawCon;
+      break;
+    case 2:
+      _allDataAnalysis.gasconcentration = 0.01f * rawCon;
+      break;
+    default:
+      _allDataAnalysis.gasconcentration = rawCon;
+      break;
+  }
+
+  _temp = adcToTempC((_allData.temp_h << 8) + _allData.temp_l);
+  if (_tempswitch == SWITCH_ON)
+    _allDataAnalysis.gasconcentration = applyTempCompensation(_allDataAnalysis.gasconcentration, _allData.gastype, _temp);
+
+  strncpy(_allDataAnalysis.gastype, gasTypeFromCode(_allData.gastype), sizeof(_allDataAnalysis.gastype) - 1);
+  _allDataAnalysis.gastype[sizeof(_allDataAnalysis.gastype) - 1] = '\0';
+  _allDataAnalysis.temp = _temp;
 }
 
 sProtocol_t DFRobot_GAS::pack(uint8_t *pBuf, uint8_t len)
-{ 
-  sProtocol_t _protocol;
-  _protocol.head = 0xff;
-  _protocol.addr = 0x01;
-  memcpy(_protocol.data, pBuf, len);
-  _protocol.check = FucCheckSum((uint8_t *)&_protocol, 8);
-  return _protocol;
+{
+  sProtocol_t protocol;
+  protocol.head = 0xff;
+  protocol.addr = 0x01;
+  memset(protocol.data, 0, sizeof(protocol.data));
+  if (len > sizeof(protocol.data))
+    len = sizeof(protocol.data);
+  memcpy(protocol.data, pBuf, len);
+  protocol.check = FucCheckSum((uint8_t *)&protocol, 8);
+  return protocol;
 }
 
 bool DFRobot_GAS::changeAcquireMode(eMethod_t mode)
 {
-  uint8_t buf[6]={0};
-  uint8_t recvbuf[9]={0};
+  uint8_t buf[DFGAS_PAYLOAD_LEN] = {0};
+  uint8_t recvbuf[DFGAS_PROTOCOL_LEN] = {0};
   buf[0] = CMD_CHANGE_GET_METHOD;
   buf[1] = mode;
-  sProtocol_t _protocol = pack(buf, sizeof(buf));
-  writeData(0, (uint8_t *)&_protocol, sizeof(_protocol));
-  delay(100);
-  readData(0,recvbuf,9);
-  if(recvbuf[2]==1){
-    return true;
-  }else{
+  sProtocol_t protocol = pack(buf, sizeof(buf));
+  writeData(0, (uint8_t *)&protocol, sizeof(protocol));
+  if (!readResponse(recvbuf, sizeof(recvbuf)))
     return false;
-  }
+  if (!responseChecksumValid(recvbuf, sizeof(recvbuf)))
+    return false;
+  return recvbuf[2] == 1;
 }
 
 float DFRobot_GAS::readGasConcentrationPPM(void)
 {
-  uint8_t buf[6] = {0};
-  uint8_t recvbuf[9] = {0};
-  uint8_t gastype;
-  uint8_t decimal_digits;
+  uint8_t buf[DFGAS_PAYLOAD_LEN] = {0};
+  uint8_t recvbuf[DFGAS_PROTOCOL_LEN] = {0};
   buf[0] = CMD_GET_GAS_CONCENTRATION;
-  sProtocol_t _protocol = pack(buf, sizeof(buf));
-  writeData(0, (uint8_t *)&_protocol, sizeof(_protocol));
-  delay(100);
-  readData(0, recvbuf, 9);
-  float Con=0.0;
-  if(FucCheckSum(recvbuf,8) == recvbuf[8])
+  sProtocol_t protocol = pack(buf, sizeof(buf));
+  writeData(0, (uint8_t *)&protocol, sizeof(protocol));
+  if (!readResponse(recvbuf, sizeof(recvbuf)))
+    return 0.0f;
+  if (!responseChecksumValid(recvbuf, sizeof(recvbuf)))
+    return 0.0f;
+
+  float con = (float)((recvbuf[2] << 8) + recvbuf[3]);
+  switch (recvbuf[5])
   {
-    Con=((recvbuf[2]<<8)+recvbuf[3])*1.0;
-    gastype = recvbuf[4];
-    decimal_digits = recvbuf[5];
-    switch(decimal_digits){
-      case 1:
-        Con *= 0.1;
-        break;
-      case 2:
-        Con *= 0.01;
-        break;
-      default:
-        break;
-    }
-    if (_tempswitch == DFRobot_GAS::ON)
-    {
-      switch (gastype)
-      {
-        case DFRobot_GAS::O2:
-          break;
-        case DFRobot_GAS::CO:
-          if (((_temp) > -20) && ((_temp) < 20))
-            Con = (Con / (0.005 * (_temp) + 0.9));
-          else if (((_temp) > 20) && ((_temp) < 40))
-            Con = (Con / (0.005 * (_temp) + 0.9) - (0.3 * (_temp)-6));
-          else
-            Con = 0.0;
-          break;
-        case DFRobot_GAS::H2S:
-          if (((_temp) > -20) && ((_temp) < 20))
-            Con = (Con / (0.006 * (_temp) + 0.92));
-          else if (((_temp) > 20) && ((_temp) < 40))
-            Con = (Con / (0.006 * (_temp) + 0.92) - (0.015 * (_temp) + 2.4));
-          else
-            Con = 0.0;
-          break;
-        case DFRobot_GAS::NO2:
-          if (((_temp) > -20) && ((_temp) < 0))
-            Con = ((Con / (0.005 * (_temp) + 0.9) - (-0.0025 * (_temp))));
-          else if (((_temp) > 0) && ((_temp) < 20))
-            Con = ((Con / (0.005 * (_temp) + 0.9) - (0.005 * (_temp) + 0.005)));
-          else if (((_temp) > 20) && ((_temp) < 40))
-            Con = ((Con / (0.005 * (_temp) + 0.9) - (0.0025 * (_temp) + 0.1)));
-          else
-            Con = 0.0;
-          break;
-        case DFRobot_GAS::O3:
-          if (((_temp) > -20) && ((_temp) < 0))
-            Con = ((Con / (0.015 * (_temp) + 1.1) - 0.05));
-          else if (((_temp) > 0) && ((_temp) < 20))
-            Con = ((Con / 1.1 - (0.01 * (_temp))));
-          else if (((_temp) > 20) && ((_temp) < 40))
-            Con = ((Con / 1.1 - (-0.05 * (_temp) + 0.3)));
-          else
-            Con = 0.0;
-          break;
-        case DFRobot_GAS::CL2:
-          if (((_temp) > -20) && ((_temp) < 0))
-            Con = ((Con / (0.015 * (_temp) + 1.1) - (-0.0025 * (_temp))));
-          else if (((_temp) > 0) && ((_temp) < 20))
-            Con = ((Con / 1.1 - 0.005 * (_temp)));
-          else if (((_temp) > 20) && ((_temp) < 40))
-            Con = ((Con / 1.1 - (0.06 * (_temp)-0.12)));
-          else
-            Con = 0.0;
-          break;
-        case DFRobot_GAS::NH3:
-          if (((_temp) > -20) && ((_temp) < 0))
-            Con = (Con / (0.08 * (_temp) + 3.98) - (-0.005 * (_temp) + 0.3));
-          else if (((_temp) > 0) && ((_temp) < 20))
-            Con = (Con / (0.08 * (_temp) + 3.98) - (-0.005 * (_temp) + 0.3));
-          else if (((_temp) > 20) && ((_temp) < 40))
-            Con = (Con / (0.004 * (_temp) + 1.08) - (-0.1 * (_temp) + 2));
-          else
-            Con = 0.0;
-          break;
-        case DFRobot_GAS::H2:
-          if (((_temp) > -20) && ((_temp) < 40))
-            Con = (Con / (0.74 * (_temp) + 0.007) - 5);
-          else
-            Con = 0.0;
-          break;
-        case DFRobot_GAS::HF:
-          if (((_temp) > -20) && ((_temp) < 0))
-            Con = (((Con / 1) - (-0.0025 * (_temp))));
-          else if (((_temp) > 0) && ((_temp) < 20))
-            Con = ((Con / 1 + 0.1));
-          else if (((_temp) > 20) && ((_temp) < 40))
-            Con = ((Con / 1 - (0.0375 * (_temp)-0.85)));
-          else
-            Con = 0.0;
-          break;
-        case DFRobot_GAS::_PH3:
-          if (((_temp) > -20) && ((_temp) < 40))
-            Con = ((Con / (0.005 * (_temp) + 0.9)));
-          break;
-        case DFRobot_GAS::HCL:
-          break;
-        case DFRobot_GAS::SO2:
-          break;
-        default:
-          break;
-      }
-    }
+    case 1:
+      con *= 0.1f;
+      break;
+    case 2:
+      con *= 0.01f;
+      break;
+    default:
+      break;
   }
-  else
+
+  if (_tempswitch == SWITCH_ON)
   {
-    Con = 0.0;
+    _temp = readTempC();
+    con = applyTempCompensation(con, recvbuf[4], _temp);
   }
-  if (Con<0)
-    return 0;
-  else
-    return Con;
+
+  return (con < 0.0f) ? 0.0f : con;
 }
 
 String DFRobot_GAS::queryGasType(void)
 {
-  uint8_t buf[6] = {0};
-  uint8_t recvbuf[9] = {0};
+  uint8_t buf[DFGAS_PAYLOAD_LEN] = {0};
+  uint8_t recvbuf[DFGAS_PROTOCOL_LEN] = {0};
   buf[0] = CMD_GET_GAS_CONCENTRATION;
-  sProtocol_t _protocol = pack(buf, sizeof(buf));
-  writeData(0, (uint8_t *)&_protocol, sizeof(_protocol));
-  delay(100);
-  readData(0, recvbuf, 9);
-  if(FucCheckSum(recvbuf,8) == recvbuf[8]){
-    switch(recvbuf[4]){
-      case 0x05:
-        return "O2";
-        break;
-      case 0x04:
-        return "CO";
-        break;
-      case 0x03:
-        return "H2S";
-        break;
-      case 0x2C:
-        return "NO2";
-        break;
-      case 0x2A:
-        return "O3";
-        break;
-      case 0x31:
-        return "CL2";
-        break;
-      case 0x02:
-        return "NH3";
-        break;
-      case 0x06:
-        return "H2";
-        break;
-      case 0x2E:
-        return "HCL";
-        break;
-      case 0x2B:
-        return "SO2";
-        break;
-      case 0x33:
-        return "HF";
-        break;
-      case 0x45:
-        return "PH3";
-        break;
-      default:
-        return "";
-        break;
-    }
-  }else{
+  sProtocol_t protocol = pack(buf, sizeof(buf));
+  writeData(0, (uint8_t *)&protocol, sizeof(protocol));
+  if (!readResponse(recvbuf, sizeof(recvbuf)))
     return "NO GAS";
-  }
+  if (!responseChecksumValid(recvbuf, sizeof(recvbuf)))
+    return "NO GAS";
+
+  const char *type = gasTypeFromCode(recvbuf[4]);
+  if (type[0] == '\0')
+    return "NO GAS";
+  return String(type);
 }
 
-bool DFRobot_GAS::setThresholdAlarm(eSwitch_t switchof, uint16_t threshold, eALA_t alamethod,String gasType)
+bool DFRobot_GAS::setThresholdAlarm(eSwitch_t switchof, uint16_t threshold, eALA_t alamethod, eType_t gasType)
 {
-  if (gasType == "O2")
-    threshold *= 10;
-  else if (gasType == "NO2")
-    threshold *= 10;
-  else if (gasType == "O3")
-    threshold *= 10;
-  else if (gasType == "CL2")
-    threshold *= 10;
-  else if (gasType == "HCL")
-    threshold *= 10;
-  else if (gasType == "SO2")
-    threshold *= 10;
-  else if (gasType == "HF")
-    threshold *= 10;
-  else if (gasType == "PH3")
-    threshold *= 10;
-  uint8_t buf[6] = {0};
-  uint8_t recvbuf[9] = {0};
+  scaleThresholdForGasType(threshold, gasType);
+
+  uint8_t buf[DFGAS_PAYLOAD_LEN] = {0};
+  uint8_t recvbuf[DFGAS_PROTOCOL_LEN] = {0};
   buf[0] = CMD_SET_THRESHOLD_ALARMS;
   buf[1] = switchof;
-  buf[2] = (int)threshold >> 8;
-  buf[3] = (int)threshold;
+  buf[2] = threshold >> 8;
+  buf[3] = threshold;
   buf[4] = alamethod;
-  sProtocol_t _protocol = pack(buf, sizeof(buf));
-  writeData(0, (uint8_t *)&_protocol, sizeof(_protocol));
-  delay(100);
-  readData(0, recvbuf, 9);
-  if (recvbuf[8]!=FucCheckSum(recvbuf,8))
+  sProtocol_t protocol = pack(buf, sizeof(buf));
+  writeData(0, (uint8_t *)&protocol, sizeof(protocol));
+  if (!readResponse(recvbuf, sizeof(recvbuf)))
     return false;
-  if(recvbuf[2]==1)
-    return true;
-  else 
+  if (!responseChecksumValid(recvbuf, sizeof(recvbuf)))
     return false;
+  return recvbuf[2] == 1;
+}
+
+bool DFRobot_GAS::setThresholdAlarm(eSwitch_t switchof, uint16_t threshold, eALA_t alamethod, const char *gasType)
+{
+  if (gasType == NULL)
+    return setThresholdAlarm(switchof, threshold, alamethod, (eType_t)0);
+
+  if (strcmp(gasType, "O2") == 0)
+    return setThresholdAlarm(switchof, threshold, alamethod, O2);
+  if (strcmp(gasType, "CO") == 0)
+    return setThresholdAlarm(switchof, threshold, alamethod, CO);
+  if (strcmp(gasType, "H2S") == 0)
+    return setThresholdAlarm(switchof, threshold, alamethod, H2S);
+  if (strcmp(gasType, "NO2") == 0)
+    return setThresholdAlarm(switchof, threshold, alamethod, NO2);
+  if (strcmp(gasType, "O3") == 0)
+    return setThresholdAlarm(switchof, threshold, alamethod, O3);
+  if (strcmp(gasType, "CL2") == 0)
+    return setThresholdAlarm(switchof, threshold, alamethod, CL2);
+  if (strcmp(gasType, "NH3") == 0)
+    return setThresholdAlarm(switchof, threshold, alamethod, NH3);
+  if (strcmp(gasType, "H2") == 0)
+    return setThresholdAlarm(switchof, threshold, alamethod, H2);
+  if (strcmp(gasType, "HCL") == 0)
+    return setThresholdAlarm(switchof, threshold, alamethod, HCL);
+  if (strcmp(gasType, "SO2") == 0)
+    return setThresholdAlarm(switchof, threshold, alamethod, SO2);
+  if (strcmp(gasType, "HF") == 0)
+    return setThresholdAlarm(switchof, threshold, alamethod, HF);
+  if (strcmp(gasType, "PH3") == 0)
+    return setThresholdAlarm(switchof, threshold, alamethod, _PH3);
+
+  return setThresholdAlarm(switchof, threshold, alamethod, (eType_t)0);
+}
+
+bool DFRobot_GAS::setThresholdAlarm(eSwitch_t switchof, uint16_t threshold, eALA_t alamethod, String gasType)
+{
+  return setThresholdAlarm(switchof, threshold, alamethod, gasType.c_str());
 }
 
 float DFRobot_GAS::readTempC(void)
 {
-  uint8_t buf[6] = {0};
-  uint8_t recvbuf[9] = {0};
+  uint8_t buf[DFGAS_PAYLOAD_LEN] = {0};
+  uint8_t recvbuf[DFGAS_PROTOCOL_LEN] = {0};
   buf[0] = CMD_GET_TEMP;
-  sProtocol_t _protocol = pack(buf, sizeof(buf));
-  writeData(0, (uint8_t *)&_protocol, sizeof(_protocol));
-  delay(100);
-  readData(0, recvbuf, 9);
-  if (recvbuf[8] != FucCheckSum(recvbuf, 8))
-    return 0.0;
-  uint16_t temp_ADC = (recvbuf[2] << 8) + recvbuf[3];
-  float Vpd3=3*(float)temp_ADC/1024;
-  float Rth = Vpd3*10000/(3-Vpd3);
-  float Tbeta = 1/(1/(273.15+25)+1/3380.13*log(Rth/10000))-273.15;
-  return Tbeta;
+  sProtocol_t protocol = pack(buf, sizeof(buf));
+  writeData(0, (uint8_t *)&protocol, sizeof(protocol));
+  if (!readResponse(recvbuf, sizeof(recvbuf)))
+    return 0.0f;
+  if (!responseChecksumValid(recvbuf, sizeof(recvbuf)))
+    return 0.0f;
+
+  return adcToTempC((recvbuf[2] << 8) + recvbuf[3]);
 }
 
 void DFRobot_GAS::setTempCompensation(eSwitch_t tempswitch)
 {
-  ini_tempswitch = _tempswitch = tempswitch;
-  _temp=readTempC();
+  _tempswitch = tempswitch;
+  _temp = readTempC();
 }
 
 float DFRobot_GAS::getSensorVoltage(void)
 {
-  uint8_t buf[6] = {0};
-  uint8_t recvbuf[9] = {0};
+  uint8_t buf[DFGAS_PAYLOAD_LEN] = {0};
+  uint8_t recvbuf[DFGAS_PROTOCOL_LEN] = {0};
   buf[0] = CMD_SENSOR_VOLTAGE;
-  sProtocol_t _protocol = pack(buf, sizeof(buf));
-  writeData(0, (uint8_t *)&_protocol, sizeof(_protocol));
-  delay(100);
-  readData(0, recvbuf, 9);
-  if (recvbuf[8] != FucCheckSum(recvbuf, 8))
-    return 0.0;
-  else
-    return ((uint16_t )((recvbuf[2] << 8) + recvbuf[3])*3.0/1024*2);
+  sProtocol_t protocol = pack(buf, sizeof(buf));
+  writeData(0, (uint8_t *)&protocol, sizeof(protocol));
+  if (!readResponse(recvbuf, sizeof(recvbuf)))
+    return 0.0f;
+  if (!responseChecksumValid(recvbuf, sizeof(recvbuf)))
+    return 0.0f;
+
+  return ((uint16_t)((recvbuf[2] << 8) + recvbuf[3]) * 3.0f / 1024.0f * 2.0f);
 }
 
 bool DFRobot_GAS::changeI2cAddrGroup(uint8_t group)
 {
-  uint8_t buf[6] = {0};
-  uint8_t recvbuf[9] = {0};
+  uint8_t buf[DFGAS_PAYLOAD_LEN] = {0};
+  uint8_t recvbuf[DFGAS_PROTOCOL_LEN] = {0};
   buf[0] = CMD_CHANGE_IIC_ADDR;
   buf[1] = group;
-  sProtocol_t _protocol = pack(buf, sizeof(buf));
-  writeData(0, (uint8_t *)&_protocol, sizeof(_protocol));
-  delay(100);
-  readData(0, recvbuf, 9);
-  if (recvbuf[8] != FucCheckSum(recvbuf, 8))
-    return 0;
-  return recvbuf[2];
+  sProtocol_t protocol = pack(buf, sizeof(buf));
+  writeData(0, (uint8_t *)&protocol, sizeof(protocol));
+  if (!readResponse(recvbuf, sizeof(recvbuf)))
+    return false;
+  if (!responseChecksumValid(recvbuf, sizeof(recvbuf)))
+    return false;
+  return recvbuf[2] == 1;
 }
 
-//I2C underlying communication
 DFRobot_GAS_I2C::DFRobot_GAS_I2C(TwoWire *pWire, uint8_t addr)
 {
   _pWire = pWire;
-  this->_I2C_addr = addr;
+  _I2C_addr = addr;
 }
 
 bool DFRobot_GAS_I2C::begin(void)
 {
   _pWire->begin();
   _pWire->beginTransmission(_I2C_addr);
-  if(_pWire->endTransmission() == 0)
-    return true;
-  else
-    return false;
+  return _pWire->endTransmission() == 0;
 }
 
 void DFRobot_GAS_I2C::setI2cAddr(uint8_t addr)
 {
-  this->_I2C_addr = addr;
+  _I2C_addr = addr;
 }
 
 bool DFRobot_GAS_I2C::dataIsAvailable(void)
 {
-  uint8_t buf[6] = {0};
-  uint8_t recvbuf[9] = {0};
+  uint8_t buf[DFGAS_PAYLOAD_LEN] = {0};
+  uint8_t recvbuf[DFGAS_PROTOCOL_LEN] = {0};
   buf[0] = CMD_GET_ALL_DTTA;
-  sProtocol_t _protocol = pack(buf, sizeof(buf));
-  writeData(0, (uint8_t *)&_protocol, sizeof(_protocol));
-  readData(0, recvbuf, 9);
-  if (recvbuf[8] != FucCheckSum(recvbuf, 8))
+  sProtocol_t protocol = pack(buf, sizeof(buf));
+  writeData(0, (uint8_t *)&protocol, sizeof(protocol));
+  if (!readResponse(recvbuf, sizeof(recvbuf)))
     return false;
-  else{
-    memcpy((uint8_t *)&AllData, recvbuf, 9);
-    analysisAllData();
-    return true;
-  }
+
+  return storeAndAnalyzeInitiativePacket(recvbuf, sizeof(recvbuf));
 }
 
-void DFRobot_GAS_I2C::writeData(uint8_t Reg ,void* pData ,uint8_t len)
+void DFRobot_GAS_I2C::writeData(uint8_t Reg, void *pData, uint8_t len)
 {
-  uint8_t* Data = (uint8_t *)pData;
-  _pWire->beginTransmission(this->_I2C_addr);
+  uint8_t *data = (uint8_t *)pData;
+  _pWire->beginTransmission(_I2C_addr);
   _pWire->write(Reg);
-  for(uint8_t i = 0; i < len; i++)
-  {
-    _pWire->write(Data[i]);
-  }
+  for (uint8_t i = 0; i < len; i++)
+    _pWire->write(data[i]);
   _pWire->endTransmission();
 }
 
-int16_t DFRobot_GAS_I2C::readData(uint8_t Reg,uint8_t *Data,uint8_t len)
+int16_t DFRobot_GAS_I2C::readData(uint8_t Reg, uint8_t *Data, uint8_t len)
 {
-  int i=0;
-  _pWire->beginTransmission(this->_I2C_addr);
+  uint8_t i = 0;
+  _pWire->beginTransmission(_I2C_addr);
   _pWire->write(Reg);
-  if(_pWire->endTransmission() != 0)
-  {
+  if (_pWire->endTransmission() != 0)
     return -1;
-  }
-  _pWire->requestFrom((uint8_t)this->_I2C_addr,(uint8_t)len);
-  while (_pWire->available())
-  {
-    Data[i++]=_pWire->read();
-  }
-  return len;
+
+  _pWire->requestFrom((uint8_t)_I2C_addr, (uint8_t)len);
+  while (_pWire->available() && i < len)
+    Data[i++] = _pWire->read();
+
+  return (i == len) ? len : -1;
 }
 
-//UART underlying communication
 #if (!defined ARDUINO_ESP32_DEV) && (!defined __SAMD21G18A__)
+
 DFRobot_GAS_SoftWareUart::DFRobot_GAS_SoftWareUart(SoftwareSerial *psoftUart)
 {
   _psoftUart = psoftUart;
@@ -572,97 +521,90 @@ bool DFRobot_GAS_SoftWareUart::begin(void)
 
 bool DFRobot_GAS_SoftWareUart::dataIsAvailable(void)
 {
-  uint8_t len =_psoftUart->available();
-  if (len>0)
-  {
-    readData(0,(uint8_t* )&AllData,len);
-    analysisAllData();
-    return true;
-  }
-  else
-  {
+  if (_psoftUart->available() < DFGAS_PROTOCOL_LEN)
     return false;
-  }  
+
+  uint8_t recvbuf[DFGAS_PROTOCOL_LEN];
+  if (!readInitiativePacket(recvbuf, sizeof(recvbuf)))
+    return false;
+
+  return storeAndAnalyzeInitiativePacket(recvbuf, sizeof(recvbuf));
 }
 
 void DFRobot_GAS_SoftWareUart::writeData(uint8_t Reg, void *pData, uint8_t len)
 {
-  uint8_t* Data = (uint8_t* )pData;
-  _psoftUart->write(Data,len);
+  (void)Reg;
+  uint8_t *data = (uint8_t *)pData;
+  _psoftUart->write(data, len);
 }
 
 int16_t DFRobot_GAS_SoftWareUart::readData(uint8_t Reg, uint8_t *Data, uint8_t len)
 {
-  uint32_t time = millis();
-  uint8_t length;
-  while((millis()-time)<3000)
+  (void)Reg;
+  uint32_t start = millis();
+  while ((millis() - start) < 3000)
   {
-    length = _psoftUart->available();
-    if (length == len)
+    if (_psoftUart->available() >= len)
       break;
   }
-  int i=0;
-  for (int i = Reg; i < length; i++)
-  {
+
+  if (_psoftUart->available() < len)
+    return -1;
+
+  for (uint8_t i = 0; i < len; i++)
     Data[i] = _psoftUart->read();
-    if (i>=8)
-      return len;
-  }
-  return 0;
+
+  return len;
 }
 
 #else
 
 DFRobot_GAS_HardWareUart::DFRobot_GAS_HardWareUart(HardwareSerial *phardUart)
 {
-  this->_pharduart = phardUart;
+  _pharduart = phardUart;
 }
 
 bool DFRobot_GAS_HardWareUart::begin(void)
 {
-  this->_pharduart->begin(9600);
+  _pharduart->begin(9600);
   return true;
 }
 
 bool DFRobot_GAS_HardWareUart::dataIsAvailable(void)
 {
-  uint8_t len = _pharduart->available();
-  if (len > 0)
-  {
-    readData(0, (uint8_t *)&AllData, len);
-    analysisAllData();
-    return true;
-  }
-  else
-  {
+  if (_pharduart->available() < DFGAS_PROTOCOL_LEN)
     return false;
-  }
+
+  uint8_t recvbuf[DFGAS_PROTOCOL_LEN];
+  if (!readInitiativePacket(recvbuf, sizeof(recvbuf)))
+    return false;
+
+  return storeAndAnalyzeInitiativePacket(recvbuf, sizeof(recvbuf));
 }
 
 void DFRobot_GAS_HardWareUart::writeData(uint8_t Reg, void *pData, uint8_t len)
 {
-  uint8_t *Data = (uint8_t *)pData;
-  this->_pharduart->write(Data, len);
+  (void)Reg;
+  uint8_t *data = (uint8_t *)pData;
+  _pharduart->write(data, len);
 }
 
 int16_t DFRobot_GAS_HardWareUart::readData(uint8_t Reg, uint8_t *Data, uint8_t len)
 {
-  uint32_t time = millis();
-  uint8_t length;
-  while ((millis() - time) < 3000)
+  (void)Reg;
+  uint32_t start = millis();
+  while ((millis() - start) < 3000)
   {
-    length = _pharduart->available();
-    if (length == len)
+    if (_pharduart->available() >= len)
       break;
   }
 
-  int i = 0;
-  for (int i = Reg; i < length; i++)
-  {
+  if (_pharduart->available() < len)
+    return -1;
+
+  for (uint8_t i = 0; i < len; i++)
     Data[i] = _pharduart->read();
-    if (i >= 8)
-      return len;
-  }
-  return 0;
+
+  return len;
 }
 #endif

@@ -69,10 +69,10 @@ void setup() {
   delay(1000);
 
   /**
-   *Turn on temperature compensation: gas.ON : turn on
-   *             gas.OFF：turn off
+   *Turn on temperature compensation: gas.SWITCH_ON : turn on
+   *             gas.SWITCH_OFF: turn off
    */
-  gas.setTempCompensation(gas.ON);
+  gas.setTempCompensation(gas.SWITCH_ON);
 }
 
 void loop() {

@@ -73,8 +73,8 @@ void setup() {
 
 void loop() {
   /**
-   *Fill in readVolatageData() with the analog pin that actually connect to the sensor's pin A0
-   *See the current voltage output by sensor in the serial port (analog value has been converted to voltage value)
+   *Read the sensor probe voltage reported over I2C/UART via getSensorVoltage()
+   *See the current voltage output by sensor in the serial port
    * Print with 1s delay each time
    */
   Serial.print("Sensor output voltage is: ");

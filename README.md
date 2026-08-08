@@ -1,4 +1,7 @@
 # DFRobot_MultiGasSensor
+
+[![CI](https://github.com/romkey/DFRobot_MultiGasSensor/actions/workflows/ci.yml/badge.svg)](https://github.com/romkey/DFRobot_MultiGasSensor/actions/workflows/ci.yml)
+
 - [中文版](./README_CN.md)
 
 Gas sensors are widely applied to many fields such as gas research, environmental detection, production safety monitoring, dissolved gas analysis, pollution source/outlet law research, detection of toxic and harmful and combustible gas, laboratory or on-site simple gas analysis and testing, etc. This Multi-gas Sensor can be used with a variety of gas probes to detect hazardous gas concentration.
@@ -70,8 +73,8 @@ Download the zip file first to use this library and uncompress it to a folder na
    * @fn setThresholdAlarm
    * @brief Set sensor alarm threshold
    * @param switchof Whether to turn on threshold alarm switch
-   * @n            ON Turn on     
-   * @n           OFF Turn off
+   * @n            SWITCH_ON Turn on     
+   * @n           SWITCH_OFF Turn off
    * @param threshold The threshold for starting alarm
    * @param alamethod Set sensor high or low threshold alarm
    * @param gasType   Gas type
@@ -93,19 +96,10 @@ Download the zip file first to use this library and uncompress it to a folder na
    * @brief Set whether to turn on temperature compensation, values output by sensor under different temperatures are various.
    * @n     To get more accurate gas concentration, temperature compensation are necessary when calculating gas concentration.
    * @param tempswitch Whether to turn on temperature compensation
-   * @n             ON Turn on temperature compensation
-   * @n            OFF Turn off temperature compensation
+   * @n             SWITCH_ON Turn on temperature compensation
+   * @n            SWITCH_OFF Turn off temperature compensation
    */
   void setTempCompensation(eSwitch_t tempswitch);
-
-  /**
-   * @fn readVolatageData
-   * @brief Get sensor gas concentration output by original voltage, which is different from reading sensor register directly.
-   * @n     The function is mainly for detecting whether the read gas concentration is right.
-   * @param vopin Pin for receiving the original voltage output from sensor probe 
-   * @return float type, indicating return the original voltage output of sensor gas concentration
-   */
-  float readVolatageData(uint8_t vopin);
 
   /**
    * @fn pack

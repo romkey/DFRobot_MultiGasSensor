@@ -63,10 +63,10 @@ void setup() {
     delay(1000);
   }
   /**
-   *Turn on temperature compensation: gas.ON :turn on
-   *                                  gas.OFF:turn off
+   *Turn on temperature compensation: gas.SWITCH_ON :turn on
+   *                                  gas.SWITCH_OFF:turn off
    */
-  gas.setTempCompensation(gas.ON);
+  gas.setTempCompensation(gas.SWITCH_ON);
 
   //Mode of obtaining data: the sensor proactively reports data
   gas.changeAcquireMode(gas.INITIATIVE);
@@ -78,17 +78,17 @@ void loop() {
   {
     Serial.println("========================");
     Serial.print("gastype:");
-    Serial.println(AllDataAnalysis.gastype);
+    Serial.println(gas.getGasType());
     Serial.println("------------------------");
     Serial.print("gasconcentration:");
-    Serial.print(AllDataAnalysis.gasconcentration);
-    if (AllDataAnalysis.gastype.equals("O2"))
+    Serial.print(gas.getGasConcentration());
+    if (strcmp(gas.getGasType(), "O2") == 0)
       Serial.println(" %VOL");
     else
       Serial.println(" PPM");
     Serial.println("------------------------");
     Serial.print("temp:");
-    Serial.print(AllDataAnalysis.temp);
+    Serial.print(gas.getSensorTemperature());
     Serial.println(" ℃");
     Serial.println("========================");
   }
