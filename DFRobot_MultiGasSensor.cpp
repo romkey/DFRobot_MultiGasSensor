@@ -608,3 +608,70 @@ int16_t DFRobot_GAS_HardWareUart::readData(uint8_t Reg, uint8_t *Data, uint8_t l
   return len;
 }
 #endif
+
+#ifdef DFGAS_HOST_TEST
+uint8_t DFGasTestAccess::computeChecksum(uint8_t *data, uint8_t ln)
+{
+  return FucCheckSum(data, ln);
+}
+
+sProtocol_t DFGasTestAccess::pack(DFRobot_GAS &gas, uint8_t *pBuf, uint8_t len)
+{
+  return gas.pack(pBuf, len);
+}
+
+bool DFGasTestAccess::responseChecksumValid(const DFRobot_GAS &gas, const uint8_t *recvbuf, uint8_t len)
+{
+  return gas.responseChecksumValid(recvbuf, len);
+}
+
+float DFGasTestAccess::applyTempCompensation(const DFRobot_GAS &gas, float concentration, uint8_t gasType, float temp)
+{
+  return gas.applyTempCompensation(concentration, gasType, temp);
+}
+
+float DFGasTestAccess::adcToTempC(const DFRobot_GAS &gas, uint16_t tempAdc)
+{
+  return gas.adcToTempC(tempAdc);
+}
+
+const char *DFGasTestAccess::gasTypeFromCode(uint8_t code)
+{
+  return DFRobot_GAS::gasTypeFromCode(code);
+}
+
+bool DFGasTestAccess::gasTypeUsesTenths(DFRobot_GAS::eType_t gasType)
+{
+  return DFRobot_GAS::gasTypeUsesTenths(gasType);
+}
+
+void DFGasTestAccess::scaleThresholdForGasType(uint16_t &threshold, DFRobot_GAS::eType_t gasType)
+{
+  DFRobot_GAS::scaleThresholdForGasType(threshold, gasType);
+}
+
+bool DFGasTestAccess::storeAndAnalyzeInitiativePacket(DFRobot_GAS &gas, const uint8_t *recvbuf, uint8_t len)
+{
+  return gas.storeAndAnalyzeInitiativePacket(recvbuf, len);
+}
+
+bool DFGasTestAccess::readResponse(DFRobot_GAS &gas, uint8_t *recvbuf, uint8_t len)
+{
+  return gas.readResponse(recvbuf, len);
+}
+
+float DFGasTestAccess::getGasConcentration(const DFRobot_GAS &gas)
+{
+  return gas.getGasConcentration();
+}
+
+const char *DFGasTestAccess::getGasType(const DFRobot_GAS &gas)
+{
+  return gas.getGasType();
+}
+
+float DFGasTestAccess::getSensorTemperature(const DFRobot_GAS &gas)
+{
+  return gas.getSensorTemperature();
+}
+#endif

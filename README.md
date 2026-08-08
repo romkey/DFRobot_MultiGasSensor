@@ -15,6 +15,7 @@ SKU：DFR0784
 
 * [Summary](#summary)
 * [Installation](#installation)
+* [Testing](#testing)
 * [Methods](#methods)
 * [Compatibility](#compatibility)
 * [History](#history)
@@ -30,6 +31,16 @@ Meanwihle, it supports gas high/low threshold alarm.
 
 To use this library download the zip file, uncompress it to a folder named DFRobot_MultiGasSensor.
 Download the zip file first to use this library and uncompress it to a folder named DFRobot_MultiGasSensor.
+
+## Testing
+
+Host-side unit tests exercise protocol checksums, parsing, temperature compensation, and mocked sensor I/O without hardware:
+
+```bash
+test/native/run_tests.sh
+```
+
+These run automatically in GitHub Actions alongside example sketch compilation.
 
 ## Methods
 

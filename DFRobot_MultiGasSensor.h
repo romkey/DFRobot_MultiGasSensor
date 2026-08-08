@@ -83,6 +83,9 @@ typedef struct
 
 class DFRobot_GAS
 {
+#ifdef DFGAS_HOST_TEST
+  friend struct DFGasTestAccess;
+#endif
 public:
   /**
    * @enum eMethod_t
@@ -263,6 +266,25 @@ private:
   float _temp;
   uint16_t _responseDelayMs;
 };
+
+#ifdef DFGAS_HOST_TEST
+struct DFGasTestAccess
+{
+  static uint8_t computeChecksum(uint8_t *data, uint8_t ln);
+  static sProtocol_t pack(DFRobot_GAS &gas, uint8_t *pBuf, uint8_t len);
+  static bool responseChecksumValid(const DFRobot_GAS &gas, const uint8_t *recvbuf, uint8_t len);
+  static float applyTempCompensation(const DFRobot_GAS &gas, float concentration, uint8_t gasType, float temp);
+  static float adcToTempC(const DFRobot_GAS &gas, uint16_t tempAdc);
+  static const char *gasTypeFromCode(uint8_t code);
+  static bool gasTypeUsesTenths(DFRobot_GAS::eType_t gasType);
+  static void scaleThresholdForGasType(uint16_t &threshold, DFRobot_GAS::eType_t gasType);
+  static bool storeAndAnalyzeInitiativePacket(DFRobot_GAS &gas, const uint8_t *recvbuf, uint8_t len);
+  static bool readResponse(DFRobot_GAS &gas, uint8_t *recvbuf, uint8_t len);
+  static float getGasConcentration(const DFRobot_GAS &gas);
+  static const char *getGasType(const DFRobot_GAS &gas);
+  static float getSensorTemperature(const DFRobot_GAS &gas);
+};
+#endif
 
 class DFRobot_GAS_I2C : public DFRobot_GAS
 {
